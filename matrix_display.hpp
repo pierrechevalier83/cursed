@@ -74,6 +74,7 @@ void aligned_right(const std::string& content, size_t width) {
 struct Environment {
     Environment() {
         initscr();
+        setlocale(LC_ALL, "");
         cbreak();
         noecho();
         keypad(stdscr, true);
