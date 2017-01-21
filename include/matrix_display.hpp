@@ -39,7 +39,7 @@ class Color {
 };
 
 struct Cell {
-    Cell(const auto& s, int c) : content(s), color_code(c) {}
+    Cell(const auto& s, int c = 0) : content(s), color_code(c) {}
     std::wstring content;
     int color_code;
 };
@@ -48,6 +48,7 @@ void n_chars(int n, auto c) {
     std::wstring s(n, c);
     addwstr(s.c_str());
 }
+void addwch(const auto character) { n_chars(1, character); }
 void n_strings(int n, auto s) {
     while (n-- > 0) {
         addwstr(s.c_str());
@@ -55,26 +56,44 @@ void n_strings(int n, auto s) {
 }
 
 void end_line() { addch('\n'); }
-void positioned(const auto& content, size_t width, int offset) {
+auto positioned(const auto& content, auto width, int offset) {
     if (content.length() >= width) {
-        addwstr(content.c_str());
+        return content;
     } else {
         auto left = std::wstring(offset, L' ');
         auto right = std::wstring(width - (content.length() + offset), L' ');
         auto line = left + content + right;
-        addwstr(line.c_str());
+        return line;
     }
 }
-void centered(const auto& content, size_t width) {
+auto centered(const auto& content, auto width) {
     auto offset = (width - content.length()) / 2;
-    positioned(content, width, offset);
+    return positioned(content, width, offset);
 }
-void aligned_right(const auto& content, size_t width) {
+auto aligned_right(const auto& content, auto width) {
     auto offset = width - content.length();
-    positioned(content, width, offset);
+    return positioned(content, width, offset);
 }
-void aligned_left(const auto& content, size_t width) {
-    positioned(content, width, 0);
+auto aligned_left(const auto& content, auto width) {
+    return positioned(content, width, 0);
+}
+enum class Aligned { right, left, center };
+
+void printline(const auto& content, int width = 0,
+               Aligned alignment = Aligned::left) {
+    std::wstring s;
+    switch (alignment) {
+        case Aligned::right: {
+            s = aligned_right(content, width);
+        }
+        case Aligned::left: {
+            s = aligned_left(content, width);
+        }
+        case Aligned::center: {
+            s = centered(content, width);
+        }
+    }
+    addwstr(s.c_str());
 }
 
 struct Environment {
@@ -88,19 +107,35 @@ struct Environment {
     ~Environment() { endwin(); }
 };
 
+struct BoxStyle {
+    struct Corners {
+        wchar_t top_left = L'┏';
+        wchar_t top_right = L'┓';
+        wchar_t bottom_left = L'┗';
+        wchar_t bottom_right = L'┛';
+    };
+    struct Intersections {
+        wchar_t top = L'┳';
+        wchar_t bottom = L'┻';
+        wchar_t left = L'┣';
+        wchar_t right = L'┫';
+        wchar_t center = L'╋';
+    };
+    struct Borders {
+        wchar_t horizontal = L'━';
+        wchar_t vertical = L'┃';
+    };
+    Corners corners;
+    Intersections intersections;
+    Borders borders;
+};
+
 struct MatrixStyle {
-    MatrixStyle(int cell_width_, int cell_height_, auto row_sep_, auto col_sep_,
-                auto corner_sep_)
-        : cell_width(cell_width_),
-          cell_height(cell_height_),
-          row_sep(row_sep_),
-          col_sep(col_sep_),
-          corner_sep(corner_sep_) {}
+    MatrixStyle(int cell_width_, int cell_height_)
+        : cell_width(cell_width_), cell_height(cell_height_) {}
     int cell_width;
     int cell_height;
-    std::wstring row_sep;
-    std::wstring col_sep;
-    std::wstring corner_sep;
+    BoxStyle box_style;
 };
 
 class MatrixDisplay {
@@ -111,11 +146,17 @@ class MatrixDisplay {
     }
     void print(const std::vector<std::vector<Cell>>& data) {
         int n = n_rows(data);
-        sep_row(n);
+        top_row(n);
+        auto first = true;
         for (const auto& row : data) {
+            if (first) {
+                first = false;
+            } else {
+                middle_row(n);
+            }
             values(row);
-            sep_row(n);
         }
+        bottom_row(n);
     }
 
    private:
@@ -123,46 +164,63 @@ class MatrixDisplay {
         assert(!data.empty());
         return data[0].size();
     }
-    void sep_row(int n) {
-        corner();
-        while (n-- > 0) {
-            n_strings(style.cell_width, style.row_sep);
-            corner();
-        }
-        end_line();
-    }
-    void corner() { addwstr(style.corner_sep.c_str()); }
-    void values(const std::vector<Cell>& row) {
-        const auto line_height = 1;  // TODO: count \n characters
-        const auto previous_pad = (style.cell_height - line_height) / 2;
-        value_padding(previous_pad, row);
-        value(row);
-        const auto next_pad = style.cell_height - (previous_pad + line_height);
-        value_padding(next_pad, row);
-    }
-    void value_padding(int height, const std::vector<Cell>& row) {
-        std::vector<Cell> padding;
-        boost::transform(row, back_inserter(padding), [](const Cell& cell) {
-            auto padding_cell = cell;
-            padding_cell.content = L"";
-            return padding_cell;
-        });
-        while (height-- > 0) {
-            value(padding);
-        }
-    }
-    void value(const std::vector<Cell>& row) {
-        sep_col();
+    void value_row(std::vector<Cell> row, auto left, auto intersection,
+                   auto right) {
+        addwch(left);
+        auto first = true;
         for (const auto& cell : row) {
-            {
-                Color scoped(cell.color_code);
-                centered(cell.content, style.cell_width);
+            if (first) {
+                first = false;
+            } else {
+                addwch(intersection);
             }
-            sep_col();
+            Color scoped(cell.color_code);
+            printline(cell.content, style.cell_width, Aligned::center);
         }
+        addwch(right);
         end_line();
     }
-    void sep_col() { addwstr(style.col_sep.c_str()); }
+    void sep_row(int n, auto left, auto plain, auto intersection, auto right) {
+        std::vector<Cell> sep(n, Cell(std::wstring(style.cell_width, plain)));
+        value_row(sep, left, intersection, right);
+    }
+
+    void top_row(int n) {
+        const auto& box = style.box_style;
+        sep_row(n, box.corners.top_left, box.borders.horizontal,
+                box.intersections.top, box.corners.top_right);
+    }
+    void bottom_row(int n) {
+        const auto& box = style.box_style;
+        sep_row(n, box.corners.bottom_left, box.borders.horizontal,
+                box.intersections.bottom, box.corners.bottom_right);
+    }
+    void middle_row(int n) {
+        const auto& box = style.box_style;
+        sep_row(n, box.intersections.left, box.borders.horizontal,
+                box.intersections.center, box.intersections.right);
+    }
+    void values(const std::vector<Cell>& row) {
+        const auto& box = style.box_style;
+        auto padding_row = row;
+        for (auto& cell : padding_row) {
+            cell.content = std::wstring(style.cell_width, L' ');
+        }
+        const auto line_height = 1;
+        const auto top_pad = (style.cell_height - line_height) / 2;
+        for (auto i = 0; i < top_pad; ++i) {
+            value_row(padding_row, box.borders.vertical, box.borders.vertical,
+                      box.borders.vertical);
+        }
+        value_row(row, box.borders.vertical, box.borders.vertical,
+                  box.borders.vertical);
+        auto bottom_pad = style.cell_height - (top_pad + line_height);
+        for (auto i = 0; i < bottom_pad; ++i) {
+            value_row(padding_row, box.borders.vertical, box.borders.vertical,
+                      box.borders.vertical);
+        }
+    }
+    void sep_col() { addwch(style.box_style.borders.vertical); }
 
    private:
     const MatrixStyle style;
