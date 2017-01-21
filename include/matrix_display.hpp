@@ -73,6 +73,9 @@ void aligned_right(const auto& content, size_t width) {
     auto offset = width - content.length();
     positioned(content, width, offset);
 }
+void aligned_left(const auto& content, size_t width) {
+    positioned(content, width, 0);
+}
 
 struct Environment {
     Environment() {
