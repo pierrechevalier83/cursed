@@ -39,30 +39,37 @@ class Color {
 };
 
 struct Cell {
-    Cell(const std::string& s, int c) : content(s), color_code(c) {}
-    std::string content;
+    Cell(const auto& s, int c) : content(s), color_code(c) {}
+    std::wstring content;
     int color_code;
 };
 
-void n_chars(int n, char c) {
+void n_chars(int n, auto c) {
+    std::wstring s(n, c);
+    addwstr(s.c_str());
+}
+void n_strings(int n, auto s) {
     while (n-- > 0) {
-        addch(c);
+        addwstr(s.c_str());
     }
 }
+
 void end_line() { addch('\n'); }
-void positioned(const std::string& content, size_t width, int offset) {
+void positioned(const auto& content, size_t width, int offset) {
     if (content.length() >= width) {
-        printw(content.c_str());
+        addwstr(content.c_str());
     } else {
-        n_chars(offset, ' ');
-        printw("%-*s", width - offset, content.c_str());
+        auto left = std::wstring(offset, L' ');
+        auto right = std::wstring(width - (content.length() + offset), L' ');
+        auto line = left + content + right;
+        addwstr(line.c_str());
     }
 }
-void centered(const std::string& content, size_t width) {
+void centered(const auto& content, size_t width) {
     auto offset = (width - content.length()) / 2;
     positioned(content, width, offset);
 }
-void aligned_right(const std::string& content, size_t width) {
+void aligned_right(const auto& content, size_t width) {
     auto offset = width - content.length();
     positioned(content, width, offset);
 }
@@ -79,8 +86,8 @@ struct Environment {
 };
 
 struct MatrixStyle {
-    MatrixStyle(int cell_width_, int cell_height_, char row_sep_, char col_sep_,
-                char corner_sep_)
+    MatrixStyle(int cell_width_, int cell_height_, auto row_sep_, auto col_sep_,
+                auto corner_sep_)
         : cell_width(cell_width_),
           cell_height(cell_height_),
           row_sep(row_sep_),
@@ -88,9 +95,9 @@ struct MatrixStyle {
           corner_sep(corner_sep_) {}
     int cell_width;
     int cell_height;
-    char row_sep;
-    char col_sep;
-    char corner_sep;
+    std::wstring row_sep;
+    std::wstring col_sep;
+    std::wstring corner_sep;
 };
 
 class MatrixDisplay {
@@ -116,12 +123,12 @@ class MatrixDisplay {
     void sep_row(int n) {
         corner();
         while (n-- > 0) {
-            n_chars(style.cell_width, style.row_sep);
+            n_strings(style.cell_width, style.row_sep);
             corner();
         }
         end_line();
     }
-    void corner() { addch(style.corner_sep); }
+    void corner() { addwstr(style.corner_sep.c_str()); }
     void values(const std::vector<Cell>& row) {
         const auto line_height = 1;  // TODO: count \n characters
         const auto previous_pad = (style.cell_height - line_height) / 2;
@@ -134,7 +141,7 @@ class MatrixDisplay {
         std::vector<Cell> padding;
         boost::transform(row, back_inserter(padding), [](const Cell& cell) {
             auto padding_cell = cell;
-            padding_cell.content = "";
+            padding_cell.content = L"";
             return padding_cell;
         });
         while (height-- > 0) {
@@ -152,7 +159,7 @@ class MatrixDisplay {
         }
         end_line();
     }
-    void sep_col() { addch(style.col_sep); }
+    void sep_col() { addwstr(style.col_sep.c_str()); }
 
    private:
     const MatrixStyle style;
