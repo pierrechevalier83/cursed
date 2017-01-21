@@ -85,12 +85,15 @@ void printline(const auto& content, int width = 0,
     switch (alignment) {
         case Aligned::right: {
             s = aligned_right(content, width);
+			break;
         }
         case Aligned::left: {
             s = aligned_left(content, width);
+			break;
         }
         case Aligned::center: {
             s = centered(content, width);
+			break;
         }
     }
     addwstr(s.c_str());
